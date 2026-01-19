@@ -20,8 +20,8 @@ class Message:
         data = json.loads(json_data)
         type = data['message_type']
         emitter = data['data']['emitter']
-        dest = data['data'].get('dest', None)
-        content = data['data']['content']
+        dest = data['data'].get('receiver', None)
+        content = data['data']['value']
 
         return Message(type, emitter, content, dest)
     
@@ -31,8 +31,8 @@ class Message:
             'message_type': self.type,
             'data': {
                 'emitter': self.emmiter,
-                'dest': self.dest,
-                'content': self.content
+                'receiver': self.dest,
+                'value': self.content
             }
         }
         return json.dumps(data)

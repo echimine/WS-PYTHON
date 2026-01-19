@@ -2,7 +2,7 @@
     "message_type": "#MESSAGE_TYPE#",
     "data": {
         "emitter": "#EMMITER#",
-        "dest": "#DEST#",
-        "content": "#CONTENT#"
+        "receiver": "#REICEIVER#",
+        "value": "#CONTENT#"
     }
 }

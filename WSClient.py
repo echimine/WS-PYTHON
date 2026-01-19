@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
         print("Rentre ton nom")
         emit = input()
-        c = WSClient(context=Context.dev(), client_name=emit)
+        c = WSClient(context=Context.prod(), client_name=emit)
         c.connect()
 
         print("a qui veut tu envoyer ton message ?")
