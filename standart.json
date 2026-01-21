@@ -1,0 +1,8 @@
+{
+    "message_type": "#MESSAGE_TYPE#",
+    "data": {
+        "emitter": "#EMMITER#",
+        "receiver": "#REICEIVER#",
+        "value": "#CONTENT#"
+    }
+}
