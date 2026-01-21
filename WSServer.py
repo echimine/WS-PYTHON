@@ -1,6 +1,7 @@
 from websocket_server import WebsocketServer
 import threading
 import base64
+from datetime import datetime
 
 from Context import Context
 from Message import Message, MessageType
@@ -16,34 +17,39 @@ class WSServer:
         self.server.set_fn_message_received(self.on_message_received)
 
         self.clients = {}
-        self.admin_clients = {}
+        self.client_metadata = {}  # {username: {connected_at, last_activity}}
+        self.admin_clients = []    # List of admin websockets
         self.running = False
 
     def on_new_client(self, client, server):
         print(f"\n[+] Client connecté: id={client['id']} addr={client['address']}")
         welcome_msg = Message(MessageType.RECEPTION.TEXT, emitter="SERVER", receiver="", value="Bienvenue !")
-        welcome_json = welcome_msg.to_json()
-        server.send_message(client, welcome_json)
-        
-        # Forward welcome to admins
-        for admin_client in self.admin_clients.values():
-            self.server.send_message(admin_client, welcome_json)
+        server.send_message(client, welcome_msg.to_json())
         self.broadcast_clients_list()
         print("[SERVER] > ", end="", flush=True)
 
     def on_client_left(self, client, server):
         print(f"\n[-] Client déconnecté: id={client['id']}")
-        # Supprimer de la liste des clients réguliers
+        disconnected_username = None
+
         for name, c in list(self.clients.items()):
             if c['id'] == client['id']:
+                disconnected_username = name
                 del self.clients[name]
-        
-        # Supprimer de la liste des admins
-        for name, c in list(self.admin_clients.items()):
-            if c['id'] == client['id']:
-                del self.admin_clients[name]
-        
+                # Nettoie les métadonnées
+                if name in self.client_metadata:
+                    del self.client_metadata[name]
+                break
+
+        # Nettoie la liste des admins si c'était un admin
+        self.admin_clients = [a for a in self.admin_clients if a.get('id') != client.get('id')]
+
+        # Notifie les admins de la déconnexion
+        if disconnected_username and not disconnected_username.startswith("ADMIN"):
+            self.notify_admins_client_disconnected(disconnected_username)
+
         self.broadcast_clients_list()
+
         print("[SERVER] > ", end="", flush=True)
 
     def broadcast_clients_list(self):
@@ -59,10 +65,6 @@ class WSServer:
 
         for client in self.clients.values():
             self.server.send_message(client, msg)
-        
-        # Also send to all connected admin clients (Dashboards)
-        for admin_client in self.admin_clients.values():
-            self.server.send_message(admin_client, msg)
 
     def notify_admins_routing(self, emitter, receiver, msg_type):
         """Envoie une notification de routage à tous les admins (sans contenu)"""
@@ -78,7 +80,7 @@ class WSServer:
                 self.server.send_message(admin, msg.to_json())
             except:
                 pass
- 
+
     def notify_admins_client_connected(self, username):
         """Notifie les admins d'une nouvelle connexion"""
         event_data = {
@@ -92,7 +94,7 @@ class WSServer:
                 self.server.send_message(admin, msg.to_json())
             except:
                 pass
- 
+
     def notify_admins_client_disconnected(self, username):
         """Notifie les admins d'une déconnexion"""
         event_data = {
@@ -105,7 +107,7 @@ class WSServer:
                 self.server.send_message(admin, msg.to_json())
             except:
                 pass
- 
+
     def send_admin_client_list(self, admin_client):
         """Envoie la liste complète des clients avec métadonnées à un admin"""
         clients_data = []
@@ -123,43 +125,51 @@ class WSServer:
         print(f"\n[message reçu] {message}")
         received_msg = Message.from_json(message)
         if received_msg.message_type == MessageType.DECLARATION:
-            response = Message(MessageType.RECEPTION.TEXT, emitter="SERVER", receiver=received_msg.emitter, value=f"Déclaration reçue de {received_msg.emitter}")
-            response_json = response.to_json()
-            server.send_message(client, response_json)
-            
-            # Forward response to admins
-            for admin_client in self.admin_clients.values():
-                self.server.send_message(admin_client, response_json)
-            
-            # Séparation Admin / Client
-            is_admin = received_msg.emitter.startswith(("ADMIN", "ADMIN_")) or received_msg.emitter.lower() == "dashboard"
-            
-            if is_admin:
-                self.admin_clients[received_msg.emitter] = client
-                print(f"[info] Admin '{received_msg.emitter}' enregistré")
+            username = received_msg.emitter
+
+            # Détection des clients admin
+            if username == "ADMIN" or username.startswith("ADMIN_"):
+                self.admin_clients.append(client)
+                print(f"[info] Admin '{username}' connecté")
+                # Envoie la liste complète des clients à l'admin
+                self.send_admin_client_list(client)
             else:
-                self.clients[received_msg.emitter] = client
-                print(f"[info] Client '{received_msg.emitter}' enregistré")
-                self.broadcast_clients_list()
+                # Client régulier - stocke les métadonnées
+                self.client_metadata[username] = {
+                    'connected_at': datetime.now().isoformat(),
+                    'last_activity': datetime.now().isoformat()
+                }
+                # Notifie tous les admins de la nouvelle connexion
+                self.notify_admins_client_connected(username)
+
+            response = Message(MessageType.RECEPTION.TEXT, emitter="SERVER", receiver=username, value=f"Déclaration reçue de {username}")
+            server.send_message(client, response.to_json())
+            self.clients[username] = client
+            print(f"[info] Client '{username}' enregistré")
+            self.broadcast_clients_list()
         
         elif received_msg.message_type == MessageType.ENVOI.CLIENT_LIST:
             users_list = list(self.clients.keys())
             response = Message(MessageType.RECEPTION.CLIENT_LIST, emitter="SERVER", receiver=received_msg.receiver, value=users_list)
-            response_json = response.to_json()
-            server.send_message(client, response_json)
-            
-            # Forward response to admins
-            for admin_client in self.admin_clients.values():
-                self.server.send_message(admin_client, response_json)
+            server.send_message(client, response.to_json())
             print(f"CLIENTS = {users_list}")
 
         elif received_msg.message_type in [MessageType.ENVOI.TEXT, MessageType.ENVOI.IMAGE, MessageType.ENVOI.AUDIO, MessageType.ENVOI.VIDEO]:
-            # --- MONITORING LOGIC ---
-            # Forward everything to ALL connected admin clients
-            for admin_client in self.admin_clients.values():
-                server.send_message(admin_client, message)
-            # ------------------------
+            # Met à jour last_activity pour l'émetteur
+            if received_msg.emitter in self.client_metadata:
+                self.client_metadata[received_msg.emitter]['last_activity'] = datetime.now().isoformat()
 
+            # Détermine le type de message pour le log
+            msg_type_simple = 'TEXT'
+            if received_msg.message_type == MessageType.ENVOI.IMAGE:
+                msg_type_simple = 'IMAGE'
+            elif received_msg.message_type == MessageType.ENVOI.AUDIO:
+                msg_type_simple = 'AUDIO'
+            elif received_msg.message_type == MessageType.ENVOI.VIDEO:
+                msg_type_simple = 'VIDEO'
+
+            # Notifie les admins du routage (sans contenu)
+            self.notify_admins_routing(received_msg.emitter, received_msg.receiver, msg_type_simple)
 
             if received_msg.receiver == "SERVER":
                 print(f"[{received_msg.emitter}] {received_msg.value}")
@@ -194,10 +204,6 @@ class WSServer:
                     error_msg = Message(MessageType.RECEPTION.TEXT, emitter="SERVER", receiver=received_msg.emitter, value=f"Erreur: destinataire {received_msg.receiver} non trouvé.")
                     server.send_message(client, error_msg.to_json())
         elif received_msg.message_type == MessageType.SYS_MESSAGE:
-             # --- MONITORING LOGIC (SYS) ---
-             for admin_client in self.admin_clients.values():
-                 server.send_message(admin_client, message)
-             # ------------------------------
              # Forward SYS_MESSAGE (like VU) to the target receiver
              target = received_msg.receiver
              if target and target != "SERVER" and target != "ALL":
@@ -205,7 +211,6 @@ class WSServer:
                  if receiver_client:
                      forward_msg = Message(MessageType.SYS_MESSAGE, emitter=received_msg.emitter, receiver=target, value=received_msg.value)
                      server.send_message(receiver_client, forward_msg.to_json())
-
 
         print("[SERVER] > ", end="", flush=True)
 
@@ -254,10 +259,6 @@ class WSServer:
                     dest = dest.strip()
                     value = value.strip()
                     if dest.lower() == "ALL":
-                        msg_json = Message(MessageType.RECEPTION.TEXT, emitter="SERVER", receiver="ALL", value=value).to_json()
-                        for admin_client in self.admin_clients.values():
-                            self.server.send_message(admin_client, msg_json)
-                        
                         for name, client in self.clients.items():
                             msg = Message(MessageType.RECEPTION.TEXT, emitter="SERVER", receiver=name, value=value)
                             self.server.send_message(client, msg.to_json())
@@ -266,11 +267,7 @@ class WSServer:
                         receiver_client = self.clients.get(dest, None)
                         if receiver_client:
                             msg = Message(MessageType.RECEPTION.TEXT, emitter="SERVER", receiver=dest, value=value)
-                            msg_json = msg.to_json()
-                            for admin_client in self.admin_clients.values():
-                                self.server.send_message(admin_client, msg_json)
-                            
-                            self.server.send_message(receiver_client, msg_json)
+                            self.server.send_message(receiver_client, msg.to_json())
                             print(f"[envoyé à {dest}] {value}")
                         else:
                             print(f"[erreur] Client '{dest}' non trouvé")
@@ -293,10 +290,6 @@ class WSServer:
             img_base64 = base64.b64encode(f.read()).decode("utf-8")
         value = f"IMG:{img_base64}"
         if dest.lower() == "ALL":
-            msg_json = Message(MessageType.RECEPTION.IMAGE, emitter="SERVER", receiver="ALL", value=value).to_json()
-            for admin_client in self.admin_clients.values():
-                self.server.send_message(admin_client, msg_json)
-            
             for name, client in self.clients.items():
                 msg = Message(MessageType.RECEPTION.IMAGE, emitter="SERVER", receiver=name, value=value)
                 self.server.send_message(client, msg.to_json())
@@ -305,11 +298,7 @@ class WSServer:
             receiver_client = self.clients.get(dest, None)
             if receiver_client:
                 msg = Message(MessageType.RECEPTION.IMAGE, emitter="SERVER", receiver=dest, value=value)
-                msg_json = msg.to_json()
-                for admin_client in self.admin_clients.values():
-                    self.server.send_message(admin_client, msg_json)
-                
-                self.server.send_message(receiver_client, msg_json)
+                self.server.send_message(receiver_client, msg.to_json())
                 print(f"[image envoyée à {dest}]")
             else:
                 print(f"[erreur] Client '{dest}' non trouvé")
@@ -319,10 +308,6 @@ class WSServer:
             audio_base64 = base64.b64encode(f.read()).decode("utf-8")
         value = f"AUDIO:{audio_base64}"
         if dest.lower() == "ALL":
-            msg_json = Message(MessageType.RECEPTION.AUDIO, emitter="SERVER", receiver="ALL", value=value).to_json()
-            for admin_client in self.admin_clients.values():
-                self.server.send_message(admin_client, msg_json)
-                
             for name, client in self.clients.items():
                 msg = Message(MessageType.RECEPTION.AUDIO, emitter="SERVER", receiver=name, value=value)
                 self.server.send_message(client, msg.to_json())
@@ -331,11 +316,7 @@ class WSServer:
             receiver_client = self.clients.get(dest, None)
             if receiver_client:
                 msg = Message(MessageType.RECEPTION.AUDIO, emitter="SERVER", receiver=dest, value=value)
-                msg_json = msg.to_json()
-                for admin_client in self.admin_clients.values():
-                    self.server.send_message(admin_client, msg_json)
-                    
-                self.server.send_message(receiver_client, msg_json)
+                self.server.send_message(receiver_client, msg.to_json())
                 print(f"[audio envoyé à {dest}]")
             else:
                 print(f"[erreur] Client '{dest}' non trouvé")
@@ -345,10 +326,6 @@ class WSServer:
             video_base64 = base64.b64encode(f.read()).decode("utf-8")
         value = f"VIDEO:{video_base64}"
         if dest.lower() == "ALL":
-            msg_json = Message(MessageType.RECEPTION.VIDEO, emitter="SERVER", receiver="ALL", value=value).to_json()
-            for admin_client in self.admin_clients.values():
-                self.server.send_message(admin_client, msg_json)
-                
             for name, client in self.clients.items():
                 msg = Message(MessageType.RECEPTION.VIDEO, emitter="SERVER", receiver=name, value=value)
                 self.server.send_message(client, msg.to_json())
@@ -357,11 +334,7 @@ class WSServer:
             receiver_client = self.clients.get(dest, None)
             if receiver_client:
                 msg = Message(MessageType.RECEPTION.VIDEO, emitter="SERVER", receiver=dest, value=value)
-                msg_json = msg.to_json()
-                for admin_client in self.admin_clients.values():
-                    self.server.send_message(admin_client, msg_json)
-                
-                self.server.send_message(receiver_client, msg_json)
+                self.server.send_message(receiver_client, msg.to_json())
                 print(f"[video envoyée à {dest}]")
             else:
                 print(f"[erreur] Client '{dest}' non trouvé")

@@ -16,7 +16,7 @@ from Message import MessageType
 app = Flask(__name__)
 
 # Get WebSocket server config
-ctx = Context.prod()
+ctx = Context.dev()
 
 # Stockage des données
 routing_logs = []
@@ -98,14 +98,18 @@ def get_logs():
 @app.route('/api/stream')
 def stream():
     """SSE endpoint pour recevoir les événements en temps réel"""
+    print(f"[SSE] Nouvelle connexion client : {datetime.now()}")
     def event_stream():
         q = queue.Queue()
         sse_queues.append(q)
+        # Envoyer un premier événement pour confirmer la connexion au client
+        yield f"data: {json.dumps({'type': 'system', 'data': 'Connected to SSE'})}\n\n"
         try:
             while True:
                 event = q.get()
                 yield f"data: {json.dumps(event)}\n\n"
         finally:
+            print(f"[SSE] Client déconnecté")
             sse_queues.remove(q)
 
     return Response(event_stream(), mimetype='text/event-stream')
@@ -118,7 +122,7 @@ if __name__ == '__main__':
     ws_thread = threading.Thread(target=start_ws_client, daemon=True)
     ws_thread.start()
 
-    print(f"Admin Dashboard running at http://127.0.0.1:5000")
+    print(f"Admin Dashboard running at http://127.0.0.1:5005")
     print(f"WebSocket server at {ctx.url()}")
-    app.run(debug=False, port=5001)
+    app.run(debug=False, port=5005, threaded=True)
  
