@@ -5,21 +5,30 @@ class ENVOI_TYPE:
     IMAGE = "ENVOI_IMAGE"
     AUDIO = "ENVOI_AUDIO"
     VIDEO = "ENVOI_VIDEO"
+    SENSOR = "ENVOI_SENSOR"
     CLIENT_LIST = "ENVOI_CLIENT_LIST"
-
+ 
 class RECEPTION_TYPE:
     TEXT = "RECEPTION_TEXT"
     IMAGE = "RECEPTION_IMAGE"
     AUDIO = "RECEPTION_AUDIO"
     VIDEO = "RECEPTION_VIDEO"
+    SENSOR = "RECEPTION_SENSOR"
     CLIENT_LIST = "RECEPTION_CLIENT_LIST"
-
+ 
 class ADMIN_TYPE:
     ROUTING_LOG = "ADMIN_ROUTING_LOG"
     CLIENT_CONNECTED = "ADMIN_CLIENT_CONNECTED"
     CLIENT_DISCONNECTED = "ADMIN_CLIENT_DISCONNECTED"
     CLIENT_LIST_FULL = "ADMIN_CLIENT_LIST_FULL"
-
+ 
+class SENSOR_ID:
+    LIGHT = "LIGHT"
+    BUTTON = "BUTTON"
+    JOYSTICK = "JOYSTICK"
+    TEMPERATURE = "TEMPERATURE"
+    RFID = "RFID"
+ 
 class MessageType:
     DECLARATION = "DECLARATION"
     ENVOI = ENVOI_TYPE
@@ -27,13 +36,15 @@ class MessageType:
     WARNING = "WARNING"
     SYS_MESSAGE = "SYS_MESSAGE"
     ADMIN = ADMIN_TYPE
+ 
 
 class Message:
-    def __init__(self, message_type: MessageType, value, emitter, receiver=None):
+    def __init__(self, message_type: MessageType, value, emitter, receiver=None,sensor_id=None):
         self.message_type = message_type
         self.value = value
         self.emitter = emitter
         self.receiver = receiver
+        self.sensor_id = sensor_id
 
     @staticmethod
     def default_message():
@@ -46,7 +57,8 @@ class Message:
         emitter = data['data']['emitter']
         receiver = data['data'].get('receiver', None)
         value = data['data']['value']
-        return Message(message_type, value, emitter, receiver)
+        sensor_id = data['data'].get('sensor_id', None)
+        return Message(message_type, value, emitter, receiver, sensor_id)
 
     def to_json(self):
         data = {
@@ -57,7 +69,9 @@ class Message:
                 'value': self.value
             }
         }
-
+        if self.sensor_id:
+            data['data']['sensor_id'] = self.sensor_id
+ 
         return json.dumps(data)
 
 message = Message(MessageType.DECLARATION, emitter="System", receiver="All", value="This is a test message")

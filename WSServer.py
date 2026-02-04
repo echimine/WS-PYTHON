@@ -154,7 +154,7 @@ class WSServer:
             server.send_message(client, response.to_json())
             print(f"CLIENTS = {users_list}")
 
-        elif received_msg.message_type in [MessageType.ENVOI.TEXT, MessageType.ENVOI.IMAGE, MessageType.ENVOI.AUDIO, MessageType.ENVOI.VIDEO]:
+        elif received_msg.message_type in [MessageType.ENVOI.TEXT, MessageType.ENVOI.IMAGE, MessageType.ENVOI.AUDIO, MessageType.ENVOI.VIDEO, MessageType.ENVOI.SENSOR]:
             # Met à jour last_activity pour l'émetteur
             if received_msg.emitter in self.client_metadata:
                 self.client_metadata[received_msg.emitter]['last_activity'] = datetime.now().isoformat()
@@ -184,9 +184,15 @@ class WSServer:
                     reception_type = MessageType.RECEPTION.AUDIO
                 elif received_msg.message_type == MessageType.ENVOI.VIDEO:
                     reception_type = MessageType.RECEPTION.VIDEO
+                elif received_msg.message_type == MessageType.ENVOI.SENSOR:
+                    reception_type = MessageType.RECEPTION.SENSOR
                 
                 for client in self.clients.values():
-                    message = Message(reception_type, emitter=received_msg.emitter, receiver="ALL", value=received_msg.value)
+                    # if sensor_id is present, add it to the message
+                    if received_msg.sensor_id:
+                        message = Message(reception_type, emitter=received_msg.emitter, receiver="ALL", value=received_msg.value, sensor_id=received_msg.sensor_id)
+                    else:
+                        message = Message(reception_type, emitter=received_msg.emitter, receiver="ALL", value=received_msg.value)
                     self.server.send_message(client, message.to_json())
             else:
                 receiver_client = self.clients.get(received_msg.receiver, None)
@@ -198,6 +204,7 @@ class WSServer:
                         reception_type = MessageType.RECEPTION.AUDIO
                     elif received_msg.message_type == MessageType.ENVOI.VIDEO:
                         reception_type = MessageType.RECEPTION.VIDEO
+                    
                     forward_msg = Message(reception_type, emitter=received_msg.emitter, receiver=received_msg.receiver, value=received_msg.value)
                     server.send_message(receiver_client, forward_msg.to_json())
                 else:

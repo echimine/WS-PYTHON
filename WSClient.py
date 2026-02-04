@@ -85,7 +85,12 @@ class WSClient(QObject):
     def on_open(self, ws):
         print("[open] connecté")
         self.connected = True
-        message = Message(MessageType.DECLARATION, emitter=self.username, receiver="", value="")
+        message = Message(
+            message_type=MessageType.DECLARATION,
+            emitter=self.username,
+            receiver="SERVER",
+            value="hello je suis connecté"
+        )
         ws.send(message.to_json())
         self.on_client_list()
 
@@ -118,6 +123,7 @@ class WSClient(QObject):
                     else:
                         print("Format: img:dest:chemin")
                     continue
+
                 if user_input.lower().startswith("audio:"):
                     parts = user_input[6:].split(":", 1)
                     if len(parts) == 2:
@@ -174,6 +180,10 @@ class WSClient(QObject):
             audio_base64 = base64.b64encode(f.read()).decode("utf-8")
         value = f"AUDIO:{audio_base64}"
         message = Message(MessageType.ENVOI.AUDIO, emitter=self.username, receiver=dest, value=value)
+        self.ws.send(message.to_json())
+
+    def send_sensor(self, sensor_id, value, dest="ALL"):
+        message = Message(MessageType.ENVOI.SENSOR, emitter=self.username, receiver=dest, value=value, sensor_id=sensor_id)
         self.ws.send(message.to_json())
 
     @staticmethod

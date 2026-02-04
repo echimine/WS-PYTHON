@@ -1,4 +1,5 @@
 import sys
+import subprocess
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QPushButton, QListWidget, QListWidgetItem, QLineEdit, 
                              QComboBox, QFrame, QScrollArea, QSizePolicy, QFileDialog, QStackedWidget)
@@ -13,6 +14,7 @@ import base64
 import tempfile
 import os
 from PyQt5.QtGui import QPixmap
+import json
 
 class ChatWindow(QMainWindow):
     def __init__(self, client):
@@ -77,9 +79,63 @@ class ChatWindow(QMainWindow):
     def send_message(self):
         message = self.msg_input.text()
         if message:
+            # Send the user's message first
             self.client.send(message, self.send_to_box.currentText())
             self.msg_input.clear()
             self.add_mock_message(self.client.username, self.send_to_box.currentText(), datetime.datetime.now().strftime("%I:%M %p"), message)
+
+            if message.startswith('@ai'):
+                prompt = message[3:].strip()
+                try:
+                    # Execute the script
+                    result = subprocess.run(
+                        [sys.executable, "function_gemma_llamacpp.py", prompt],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    outputs = result.stdout.strip().split('\n')
+                    ai_response = None
+                    # Scan backwards to find the JSON line
+                    for line in reversed(outputs):
+                        try:
+                            data = json.loads(line)
+                            if "response" in data:
+                                ai_response = data["response"]
+                                break
+                        except json.JSONDecodeError:
+                            continue
+                    
+                    if ai_response is None:
+                        # Fallback: just show the raw stdout if no JSON found
+                        ai_response = result.stdout.strip()
+
+                    if ai_response:
+                        try:
+                            ai_data = json.loads(ai_response)
+                            sensor_id = ai_data.get("sensor_id")
+                            # Remove protocol fields to keep only the payload
+                            value_payload = {k: v for k, v in ai_data.items() if k not in ["message_type", "sensor_id"]}
+                            
+                            if sensor_id:
+                                self.client.send_sensor(sensor_id, value_payload)
+                                self.add_mock_message(self.client.username, "ALL", datetime.datetime.now().strftime("%I:%M %p"), f"[AI Action]: {sensor_id} -> {value_payload}")
+                            else:
+                                # Fallback if no sensor_id
+                                self.client.send(ai_response, self.send_to_box.currentText())
+
+                        except json.JSONDecodeError:
+                            print("Error parsing AI JSON for sensor dispatch")
+                            self.client.send(str(ai_response), self.send_to_box.currentText())
+                    else:
+                        print("Empty AI response")
+
+                except subprocess.CalledProcessError as e:
+                    print(f"Error executing AI script: {e}")
+                    error_msg = f"AI Error: {e.stderr}"
+                    self.add_mock_message("System", self.client.username, datetime.datetime.now().strftime("%I:%M %p"), error_msg)
+                except Exception as e:
+                     print(f"Unexpected error: {e}")
 
     def on_click_attach(self):
         options = QFileDialog.Options()
