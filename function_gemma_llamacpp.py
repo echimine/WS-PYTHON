@@ -77,12 +77,14 @@ def get_room_temperature(**kwargs) -> Dict[str, Any]:
 #         "color": color,
 #     }
 
-def switch_on_light(index: int) -> Dict[str, Any]:
+def switch_on_light(index: int, dest: str = "ALL") -> Dict[str, Any]:
     """Retourne la température"""
     return {
         "message_type": MessageType.ENVOI.SENSOR,
-        "sensor_id": SENSOR_ID.LIGHT,
-        "index": index,
+        "sensor_id": SENSOR_ID.LED,
+        "led_id": index,
+        "dest": dest,
+        "state": "on"
     }
  
  
@@ -140,9 +142,13 @@ TOOLS_DECL: List[Dict[str, Any]] = [
                 "properties": {
                     "index": {
                         "type": "integer",
+
+                    },
+                    "dest": {
+                        "type": "string",
                     },
                 },
-                "required": ["index"],
+                "required": ["index", "dest"],
             },
         },
     },
@@ -201,8 +207,11 @@ TOOL_DECLARATIONS_TEXT = [
                 "index": {
                     "type": "integer",
                 },
+                "dest": {
+                    "type": "string",
+                },
             },
-            "required": ["index"],
+            "required": ["index", "dest"],
         },
     }
 ]
@@ -223,20 +232,26 @@ Example: If user says "What date is 10 days after 2024-01-15", respond with:
 Example: If user says "What is the temperature in the room" or "Quelle température fait-il", respond with:
 {"name": "get_room_temperature", "parameters": {}}
 
-Example: If user says "Turn on the light at index 1", respond with:
-{"name": "switch_on_light", "parameters": {"index": 1}}
+Example: If user says "Turn on the light at index 1 of ESP32_ELIOTT", respond with:
+{"name": "switch_on_light", "parameters": {"index": 1, "dest": "ESP32_ELIOTT"}}
 
-Example: If user says "Allume la led 5", respond with:
-{"name": "switch_on_light", "parameters": {"index": 5}}
+Example: If user says "Allume la led 5 de ESP_KILLIAN", respond with:
+{"name": "switch_on_light", "parameters": {"index": 5, "dest": "ESP_Killian"}}
 
-Example: If user says "Allume la lampe 23", respond with:
-{"name": "switch_on_light", "parameters": {"index": 23}}
+Example: If user says "Allume la lampe 23 de ESP_Killian", respond with:
+{"name": "switch_on_light", "parameters": {"index": 23, "dest": "ESP_Killian"}}
 
-Example: If user says "Led 99 on", respond with:
-{"name": "switch_on_light", "parameters": {"index": 99}}
+Example: If user says "Led 99 on of ESP_NATHAN", respond with:
+{"name": "switch_on_light", "parameters": {"index": 99, "dest": "ESP_NATHAN"}}
 
-Example: If user says "Light 0", respond with:
-{"name": "switch_on_light", "parameters": {"index": 0}}
+Example: If user says "Allume la led 5 de ALL", respond with:
+{"name": "switch_on_light", "parameters": {"index": 5, "dest": "ALL"}}
+
+Example: If user says "Turn on light 10 for ALL", respond with:
+{"name": "switch_on_light", "parameters": {"index": 10, "dest": "ALL"}}
+
+Example: If user says "Light 0 of MY_ESP", respond with:
+{"name": "switch_on_light", "parameters": {"index": 0, "dest": "MY_ESP"}}
  
 IMPORTANT: Output ONLY the JSON. No text before or after.
 IMPORTANT: You MUST extract the EXACT number from the user's request. Do NOT copy the examples.

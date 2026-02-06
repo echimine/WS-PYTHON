@@ -355,5 +355,5 @@ class WSServer:
         return WSServer(Context.prod())
 
 if __name__ == "__main__":
-    ws_server = WSServer.dev()
+    ws_server = WSServer.prod()
     ws_server.start()

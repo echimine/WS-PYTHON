@@ -5,7 +5,7 @@
     "OTHER": ["DECLARATION", "SYS_MESSAGE", "WARNING"]
   },
   "sensor_id": {
-    "enum": ["LIGHT", "BUTTON", "JOYSTICK", "TEMPERATURE", "RFID"]
+    "enum": ["LIGHT", "BUTTON", "JOYSTICK", "TEMPERATURE", "RFID", "LED"]
   },
   "message_schema": {
     "type": "object",
@@ -62,6 +62,13 @@
       "properties": {
         "detected": { "type": "boolean" },
         "uud": { "type": "string" }
+      }
+    },
+    "LED": {
+      "type": "object",
+      "properties": {
+        "led_id": { "type": "integer" },
+        "state": { "type": "string" }
       }
     }
   }

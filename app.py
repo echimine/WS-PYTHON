@@ -69,6 +69,11 @@ class ChatWindow(QMainWindow):
         elif message_type == MessageType.RECEPTION.CLIENT_LIST:
             self.update_client_list(content)
 
+        elif message_type == MessageType.RECEPTION.SENSOR:
+            if isinstance(content, dict):
+                content = json.dumps(content, ensure_ascii=False)
+            self.add_mock_message(emitter, receiver, time_str, f"[SENSOR] {content}")
+
     def update_client_list(self, content):
         self.send_to_box.clear()
         self.send_to_box.addItem("ALL")
@@ -89,7 +94,7 @@ class ChatWindow(QMainWindow):
                 try:
                     # Execute the script
                     result = subprocess.run(
-                        [sys.executable, "function_gemma_llamacpp.py", prompt],
+                        [sys.executable, "function_gemma_llamacpp.py", prompt,"de ", self.send_to_box.currentText()],
                         capture_output=True,
                         text=True,
                         check=True
@@ -115,11 +120,13 @@ class ChatWindow(QMainWindow):
                             ai_data = json.loads(ai_response)
                             sensor_id = ai_data.get("sensor_id")
                             # Remove protocol fields to keep only the payload
-                            value_payload = {k: v for k, v in ai_data.items() if k not in ["message_type", "sensor_id"]}
+                            value_payload = {k: v for k, v in ai_data.items() if k not in ["message_type", "sensor_id", "dest"]}
+                            dest = ai_data.get("dest", "ALL")
+                            print("value_payload", value_payload)
                             
                             if sensor_id:
-                                self.client.send_sensor(sensor_id, value_payload)
-                                self.add_mock_message(self.client.username, "ALL", datetime.datetime.now().strftime("%I:%M %p"), f"[AI Action]: {sensor_id} -> {value_payload}")
+                                self.client.send_sensor(sensor_id, value_payload, dest=dest)
+                                self.add_mock_message(self.client.username, dest, datetime.datetime.now().strftime("%I:%M %p"), f"[AI Action]: {sensor_id} -> {value_payload} to {dest}")
                             else:
                                 # Fallback if no sensor_id
                                 self.client.send(ai_response, self.send_to_box.currentText())

@@ -28,6 +28,7 @@ class SENSOR_ID:
     JOYSTICK = "JOYSTICK"
     TEMPERATURE = "TEMPERATURE"
     RFID = "RFID"
+    LED = "LED"
  
 class MessageType:
     DECLARATION = "DECLARATION"
