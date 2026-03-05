@@ -14,7 +14,10 @@ import base64
 import tempfile
 import os
 from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap
 import json
+import speech_recognition as sr
+import threading
 
 class ChatWindow(QMainWindow):
     def __init__(self, client):
@@ -23,7 +26,9 @@ class ChatWindow(QMainWindow):
         self.resize(1200, 800)
         self.client = client
         self.client.message_received.connect(self.on_new_message)
+        self.client.message_received.connect(self.on_new_message)
         self.media_player = QMediaPlayer(None, QMediaPlayer.VideoSurface)
+        self.recognizer = sr.Recognizer()
         self.initUI()
 
     def on_click_disconnect_button(self):
@@ -91,58 +96,8 @@ class ChatWindow(QMainWindow):
 
             if message.startswith('@ai'):
                 prompt = message[3:].strip()
-                try:
-                    # Execute the script
-                    result = subprocess.run(
-                        [sys.executable, "function_gemma_llamacpp.py", prompt,"de ", self.send_to_box.currentText()],
-                        capture_output=True,
-                        text=True,
-                        check=True
-                    )
-                    outputs = result.stdout.strip().split('\n')
-                    ai_response = None
-                    # Scan backwards to find the JSON line
-                    for line in reversed(outputs):
-                        try:
-                            data = json.loads(line)
-                            if "response" in data:
-                                ai_response = data["response"]
-                                break
-                        except json.JSONDecodeError:
-                            continue
-                    
-                    if ai_response is None:
-                        # Fallback: just show the raw stdout if no JSON found
-                        ai_response = result.stdout.strip()
-
-                    if ai_response:
-                        try:
-                            ai_data = json.loads(ai_response)
-                            sensor_id = ai_data.get("sensor_id")
-                            # Remove protocol fields to keep only the payload
-                            value_payload = {k: v for k, v in ai_data.items() if k not in ["message_type", "sensor_id", "dest"]}
-                            dest = ai_data.get("dest", "ALL")
-                            print("value_payload", value_payload)
-                            
-                            if sensor_id:
-                                self.client.send_sensor(sensor_id, value_payload, dest=dest)
-                                self.add_mock_message(self.client.username, dest, datetime.datetime.now().strftime("%I:%M %p"), f"[AI Action]: {sensor_id} -> {value_payload} to {dest}")
-                            else:
-                                # Fallback if no sensor_id
-                                self.client.send(ai_response, self.send_to_box.currentText())
-
-                        except json.JSONDecodeError:
-                            print("Error parsing AI JSON for sensor dispatch")
-                            self.client.send(str(ai_response), self.send_to_box.currentText())
-                    else:
-                        print("Empty AI response")
-
-                except subprocess.CalledProcessError as e:
-                    print(f"Error executing AI script: {e}")
-                    error_msg = f"AI Error: {e.stderr}"
-                    self.add_mock_message("System", self.client.username, datetime.datetime.now().strftime("%I:%M %p"), error_msg)
-                except Exception as e:
-                     print(f"Unexpected error: {e}")
+                self.client.send(prompt, "MAC_ELIOTT_SACHA")
+            
 
     def on_click_attach(self):
         options = QFileDialog.Options()
@@ -162,6 +117,33 @@ class ChatWindow(QMainWindow):
                 self.add_mock_message(self.client.username, dest, datetime.datetime.now().strftime("%I:%M %p"), f"Video sent: {fileName.split('/')[-1]}")
             else:
                 print("Unsupported file format")
+
+    def on_click_microphone(self):
+        """Starts a background thread to listen and recognize speech."""
+        def record_thread():
+            try:
+                with sr.Microphone() as source:
+                    print("Listening...")
+                    self.recognizer.adjust_for_ambient_noise(source)
+                    audio = self.recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                
+                print("Recognizing...")
+                try:
+                    text = self.recognizer.recognize_google(audio, language="fr-FR")
+                    print(f"Recognized: {text}")
+                    self.msg_input.setText(text)
+                except sr.UnknownValueError:
+                    print("Could not understand audio")
+                except sr.RequestError as e:
+                    print(f"Request error: {e}")
+                    
+            except Exception as e:
+                print(f"Microphone error: {e}")
+
+        # Run in a separate thread
+        t = threading.Thread(target=record_thread)
+        t.daemon = True
+        t.start()
 
     def initUI(self):
         # Central Widget
@@ -342,6 +324,23 @@ class ChatWindow(QMainWindow):
         """)
         attach_btn.clicked.connect(self.on_click_attach)
         
+        mic_btn = QPushButton("🎤")
+        mic_btn.setFixedSize(50, 40)
+        mic_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F1F5F9;
+                color: #475569;
+                border-radius: 6px;
+                font-size: 20px;
+                border: 1px solid #E2E8F0;
+            }
+            QPushButton:hover { 
+                background-color: #E2E8F0;
+                color: #1E293B;
+            }
+        """)
+        mic_btn.clicked.connect(self.on_click_microphone)
+        
         send_btn = QPushButton("Send")
         send_btn.setIcon(QIcon.fromTheme("document-send"))
         send_btn.setFixedSize(90, 40)
@@ -359,6 +358,7 @@ class ChatWindow(QMainWindow):
         # If active: background-color: #3B82F6 (Blue)
         
         btn_layout.addWidget(attach_btn)
+        btn_layout.addWidget(mic_btn)
         btn_layout.addWidget(send_btn)
         
         input_layout.addLayout(send_to_layout)
