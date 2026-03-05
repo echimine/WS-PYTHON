@@ -45,6 +45,4 @@ Il est recommandé de lancer chaque composant dans un terminal séparé :
     Le dashboard sera accessible à l'adresse suivante : [http://127.0.0.1:5005](http://127.0.0.1:5005)
 
 
-    kyutai
-
     
