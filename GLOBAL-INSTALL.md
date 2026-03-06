@@ -14,3 +14,5 @@
 ## Branchement des capteurs 
 
 Regarder dans les Classes dans l'esp32 pour avoir les numéros des pins pour les brancher correctement aux raspberryPi.
+
+<img src="Schema2_Structure_Projet.png" alt="Schema_Structure_projet" width="500"/>
