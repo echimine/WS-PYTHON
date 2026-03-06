@@ -11,6 +11,6 @@
 - Pour connecté ESP32 -> Via Thonny lancer l’ESP32  
   
 
-## Branchement des cpateurs 
+## Branchement des capteurs 
 
 Regarder dans les Classes dans l'esp32 pour avoir les numéros des pins pour les brancher correctement aux raspberryPi.
